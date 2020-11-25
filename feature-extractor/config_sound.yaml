@@ -1,0 +1,9 @@
+# Configuration for extraction of sound features for SoccerNet
+# Note: Remember to convert SoccerNet dataset to .wav file format before attempting to extract Mel-Spectograms
+
+MEL_SPECTOGRAM:
+  STEP_SIZE: 10 # in ms
+  SAMPLE_RATE: 8000 # in Hz
+  N_FFT: 512 # N fft coefficients
+  WINDOW_SIZE_STFT: 25 # window size for STFT in ms
+  WINDOW_SIZE: 4 # window size for each spectrogram in seconds
