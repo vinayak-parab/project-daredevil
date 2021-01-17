@@ -30,6 +30,7 @@ class soccernet_dataset_generic(Dataset):
         self.ms = dict()
         self.mfcc = dict()
         self.resnet = dict()
+        self.combined = dict()
         self.window_size=window_size
         self.transform =  transforms.Compose([transforms.ToTensor()])
         self.background = background
@@ -182,15 +183,17 @@ class soccernet_dataset_generic(Dataset):
             
         vidpath = str(self.samples[idx][0])
         # Add bools to check if loaded -- if bool(self.waves..)
-        wave = self.waves.get(vidpath)[time_half - 1] # Convert to time for waves
+        #wave = self.waves.get(vidpath)[time_half - 1] # Convert to time for waves
         ms = self.ms.get(vidpath)[time_half - 1] # Convert to time for waves
         resnet_features = self.resnet.get(vidpath)[time_half - 1]
+        combined_features = self.combined.get(vidpath)[time_half - 1]
         
         # ,seconds_spot,window_size_seconds,duration_seconds,sr=2,window_position=None):
-        wave_idx = self._get_wave_idx_for_sample(seconds_spot = seconds_spot,
-                                                duration_seconds=duration,
-                                                window_size_seconds=self.window_size,
-                                                window_position=self.get_window_position()) # Consider addition of window options
+        #wave_idx = self._get_wave_idx_for_sample(seconds_spot = seconds_spot,
+        #                                        duration_seconds=duration,
+        #                                        window_size_seconds=self.window_size,
+        #                                        window_position=self.get_window_position()) # Consider addition of window options
+
         ms_idx = self._get_ms_idx_for_sample(seconds_spot = seconds_spot,
                                             duration_seconds=duration,
                                             window_size_seconds=self.window_size,
@@ -199,17 +202,14 @@ class soccernet_dataset_generic(Dataset):
                                                     duration_seconds=duration,
                                                     window_size_seconds=self.window_size,
                                                     window_position=self.get_window_position())
-
-
-        # Get clip
-        # Transforms
-
         # todo
         mfcc_idx = None
         #wave_spot = wave[wave_idx[0]:wave_idx[1]]
         
         ms_spot = torch.from_numpy(ms[:,ms_idx[0]:ms_idx[1]])
         resnet_spot = resnet_features[resnet_idx[0]:resnet_idx[1],:]
+        combined_spot = combined_features[resnet_idx[0]:resnet_idx[1],:]
+
 
         # remove bad nums
         ms_spot[ms_spot.isneginf()] = 0
@@ -231,7 +231,7 @@ class soccernet_dataset_generic(Dataset):
                   'label':label,
                   'lang':self.samples[idx][3],
                   'idx':idx,
-                  'ms_idx':ms_idx, 'ms_spot':ms_spot,
+                  'ms_idx':ms_idx, 'ms_spot':ms_spot, 'combined_spot':combined_spot,
                   'resnet_idx': resnet_idx,'resnet_spot':resnet_spot}
                     #'mfcc':-1, 'mfcc_idx':mfcc_idx,
     
@@ -269,6 +269,15 @@ class soccernet_dataset_generic(Dataset):
                 half1 = np.load(self.root_dir+path+"/1_ResNET_PCA512.npy")
                 half2 = np.load(self.root_dir+path+"/2_ResNET_PCA512.npy")
                 self.resnet[path] = (half1,half2)
+        else:
+            print("Already loaded!")
+    
+    def load_combined(self):
+        if self.lang_sub_samples:
+            for path in tqdm(self.lang_sub_samples):
+                half1 = np.load(self.root_dir+path+"/audio_resnet_combined_h1.npy")
+                half2 = np.load(self.root_dir+path+"/audio_resnet_combined_h2.npy")
+                self.combined[path] = (half1,half2)
         else:
             print("Already loaded!")
             

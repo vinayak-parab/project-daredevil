@@ -3,6 +3,8 @@
 # dataset for sound
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms._transforms_video as video_transform
+import torchvision.transforms as transforms
 import numpy as np
 import torch
 import os
@@ -31,7 +33,7 @@ class soccernet_dataset_generic(Dataset):
         self.mfcc = dict()
         self.resnet = dict()
         self.window_size=window_size
-        self.transform =  transforms.Compose([transforms.ToTensor()])
+        self.transform =  transform#transforms.Compose([transforms.ToTensor()])
         self.background = background
         self.window_position = window_position
         
@@ -48,6 +50,8 @@ class soccernet_dataset_generic(Dataset):
             for annotation in annotations:
                 # Check that annotations hold correct labels
                         if ("card" in annotation["label"]) or ("subs" in annotation["label"]) or ("soccer" in annotation["label"]):
+                            annotation["duration1"] = duration1
+                            annotation["duration2"] = duration2
                             self.samples.append([path,annotation,"soccernet",language,(duration1,duration2)])
        
 
@@ -90,6 +94,8 @@ class soccernet_dataset_generic(Dataset):
                             new_gametime = "1 - " + background_anchor
                             
                             background_annotation = {'gameTime': new_gametime, 'label': 'background', 'team': 'none'}
+                            background_annotation["duration1"] = duration1
+                            background_annotation["duration2"] = duration2
                             self.samples.append([path,background_annotation,"soccernet",language,(duration1,duration2)]) # add some ID for soccernet data
             for outer2,path in outer_anchors_2:
                 if outer2:
@@ -100,6 +106,8 @@ class soccernet_dataset_generic(Dataset):
                             background_anchor = str(datetime.timedelta(seconds=new_anchor))[-5:]
                             new_gametime = "2 - " + background_anchor
                             background_annotation = {'gameTime': new_gametime, 'label': 'background', 'team': 'none'}
+                            background_annotation["duration1"] = duration1
+                            background_annotation["duration2"] = duration2
                             self.samples.append([path,background_annotation,"soccernet",language,(duration1,duration2)]) # add some ID for soccernet data
             
 
@@ -158,7 +166,16 @@ class soccernet_dataset_generic(Dataset):
         time_minute = int(self.samples[idx][1]["gameTime"][-5:-3])
         time_second = int(self.samples[idx][1]["gameTime"][-2:])
         annotation = self.samples[idx][1]
-        
+        """
+        if time_half == 1:
+            video_length = self.samples[idx][1]["duration1"]
+        elif time_half == 2:
+            video_length = self.samples[idx][1]["duration2"]
+
+        video_length_min = video_length[-8:-6]
+        video_length_sec = video_length[-5:-3]
+        total_sec = int(video_length_min)*60 + int(video_length_sec)
+        """
         if time_half == 1:
             duration_raw = self.samples[idx][4][0]
         elif time_half == 2:
@@ -202,6 +219,11 @@ class soccernet_dataset_generic(Dataset):
 
 
         # Get clip
+        clip = self.get_clip(path = self.root_dir+vidpath,
+                        event_spot = seconds_spot,
+                        window_size = self.window_size,
+                        duration_seconds = duration,
+                        half = time_half)
         # Transforms
 
         # todo
@@ -231,10 +253,13 @@ class soccernet_dataset_generic(Dataset):
                   'label':label,
                   'lang':self.samples[idx][3],
                   'idx':idx,
+                  'clip':clip,
                   'ms_idx':ms_idx, 'ms_spot':ms_spot,
                   'resnet_idx': resnet_idx,'resnet_spot':resnet_spot}
                     #'mfcc':-1, 'mfcc_idx':mfcc_idx,
     
+        if self.transform:
+            sample['clip'] = self.transform(sample['clip'])
         return sample
             
     def get_annotations(self,path):
@@ -247,6 +272,54 @@ class soccernet_dataset_generic(Dataset):
         return path,labels
     
 
+    def get_clip(self, path,event_spot,window_size,duration_seconds,half):
+        
+        
+        fps = 25.0 # assume fps = 25 for now, should be so
+        frames = int(window_size*fps)
+        diff = window_size / 2
+        eps = 2
+        
+        if window_size < 1:
+            return "Error, too small of a window"
+        
+        start = event_spot - diff
+        end = event_spot + diff
+        
+        if (end + eps) >= duration_seconds:
+            end = duration_seconds
+            start = end - window_size
+        
+        if (start - eps) <= 0:
+            start = 0
+            end = start + window_size
+        
+        vidpath = path+"/"+str(half)+".mkv"
+        # Buffer to endsec incase of bad load
+        end = end + eps # loads more frames than needed, then reduced later
+        start = start
+        
+        clip,_,info = torchvision.io.read_video(vidpath, start_pts=start, end_pts=end, pts_unit='sec')
+        
+        # TODO : This should be tested
+        clip = clip[:frames,:,:,:]
+        
+        csize = clip.size()
+        # At this point clip is [T x H x W x C]
+        if clip.size()[3] != 3 or clip.size()[0] != frames or clip.size()[1] != 224 or clip.size()[2] != 398:
+            if clip.size()[1] != 224 or clip.size()[2] != 398 or clip.size()[0] / frames < 0.6:
+                clip = torch.zeros([frames,224,398,3]).byte()
+            elif clip.size()[1] == 224 and clip.size()[2] == 398 and clip.size()[0] / frames > 0.6:
+                a = clip.size()[0]
+                b = frames - a
+                last_f = clip[(a-1):,:,:,:]
+                dup = last_f.repeat(b,1,1,1)
+                clip = torch.cat((clip,dup)).byte()
+
+        
+        return clip
+
+        
     def get_lang_label(self,path):
         """ Reads json files and returns """
         with open(self.root_dir+path+"/lang_label_test.json") as jsonfile:

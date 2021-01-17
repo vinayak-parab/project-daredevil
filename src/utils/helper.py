@@ -13,8 +13,15 @@ def samples_by_language(path_to_language_dict, path_to_sample_list,lang='all'):
     for s in sample_list:
         if lang == 'all':
             samples.append(s)
-        else:
+        elif lang == 'eng':
             if lang == language_annotations[s]:
                 samples.append(s)
+        elif lang == 'other':
+            if not 'eng' == language_annotations[s]:
+                samples.append(s)
+
+        #else:
+        #    if lang == language_annotations[s]:
+        #        samples.append(s)
                 
     return samples
