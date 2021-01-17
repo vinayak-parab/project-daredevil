@@ -2,4 +2,7 @@
 .pdf
 runs
 .pth
-
+notebooks/*.pth
+notebooks/*.pdf
+notebooks/*.png
+notebooks/weights/
